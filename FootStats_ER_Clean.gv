@@ -1,0 +1,87 @@
+graph FootStats_ER_Clean {
+	rankdir=TB
+	splines=true
+	nodesep=0.7
+	ranksep=1.0
+	Country [label=Country peripheries=1 shape=box]
+	League [label=League peripheries=1 shape=box]
+	Team [label=Team peripheries=1 shape=box]
+	Player [label=Player peripheries=1 shape=box]
+	Match [label=Match peripheries=1 shape=box]
+	Match_Event [label=Match_Event peripheries=2 shape=box]
+	Betting_Odds [label=Betting_Odds peripheries=2 shape=box]
+	Country_id [label=<<U>id</U>> margin=0.05 shape=ellipse]
+	Country -- Country_id
+	Country_name [label=name margin=0.05 shape=ellipse]
+	Country -- Country_name
+	League_id [label=<<U>id</U>> margin=0.05 shape=ellipse]
+	League -- League_id
+	League_name [label=name margin=0.05 shape=ellipse]
+	League -- League_name
+	Team_team_api_id [label=<<U>team_api_id</U>> margin=0.05 shape=ellipse]
+	Team -- Team_team_api_id
+	Team_team_long_name [label=team_long_name margin=0.05 shape=ellipse]
+	Team -- Team_team_long_name
+	Team_team_short_name [label=team_short_name margin=0.05 shape=ellipse]
+	Team -- Team_team_short_name
+	Player_player_api_id [label=<<U>player_api_id</U>> margin=0.05 shape=ellipse]
+	Player -- Player_player_api_id
+	Player_player_name [label=player_name margin=0.05 shape=ellipse]
+	Player -- Player_player_name
+	Match_match_api_id [label=<<U>match_api_id</U>> margin=0.05 shape=ellipse]
+	Match -- Match_match_api_id
+	Match_date [label=date margin=0.05 shape=ellipse]
+	Match -- Match_date
+	Match_home_team_goal [label=home_team_goal margin=0.05 shape=ellipse]
+	Match -- Match_home_team_goal
+	Match_away_team_goal [label=away_team_goal margin=0.05 shape=ellipse]
+	Match -- Match_away_team_goal
+	Match_Event_event_id [label="event_id (Partial)" margin=0.05 shape=ellipse]
+	Match_Event -- Match_Event_event_id
+	Match_Event_event_type [label=event_type margin=0.05 shape=ellipse]
+	Match_Event -- Match_Event_event_type
+	Betting_Odds_bookmaker [label="bookmaker (Partial)" margin=0.05 shape=ellipse]
+	Betting_Odds -- Betting_Odds_bookmaker
+	Betting_Odds_home_win [label=home_win margin=0.05 shape=ellipse]
+	Betting_Odds -- Betting_Odds_home_win
+	Located_In [label=Located_In peripheries=1 shape=diamond]
+	League -- Located_In [dir=forward penwidth=3.0]
+	Country -- Located_In [dir=none penwidth=1.0]
+	Belongs_To [label=Belongs_To peripheries=1 shape=diamond]
+	Match -- Belongs_To [dir=forward penwidth=3.0]
+	League -- Belongs_To [dir=none penwidth=1.0]
+	Plays_Home [label=Plays_Home peripheries=1 shape=diamond]
+	Match -- Plays_Home [dir=forward penwidth=3.0]
+	Team -- Plays_Home [dir=none penwidth=1.0]
+	Plays_Away [label=Plays_Away peripheries=1 shape=diamond]
+	Match -- Plays_Away [dir=forward penwidth=3.0]
+	Team -- Plays_Away [dir=none penwidth=1.0]
+	Occurs_In [label=Occurs_In peripheries=2 shape=diamond]
+	Match_Event -- Occurs_In [dir=forward penwidth=3.0]
+	Match -- Occurs_In [dir=none penwidth=1.0]
+	Offered_For [label=Offered_For peripheries=2 shape=diamond]
+	Betting_Odds -- Offered_For [dir=forward penwidth=3.0]
+	Match -- Offered_For [dir=none penwidth=1.0]
+	Appearance [label=Appearance peripheries=1 shape=diamond]
+	Player -- Appearance [dir=none penwidth=1.0]
+	Match -- Appearance [dir=none penwidth=1.0]
+	Appearance_X_coordinate [label=X_coordinate margin=0.05 shape=ellipse]
+	Appearance -- Appearance_X_coordinate
+	subgraph cluster_legend {
+		rank=sink
+		color=white
+		Legend [label=<
+    <table border="0" cellborder="1" cellspacing="0" cellpadding="5">
+        <tr><td colspan="2" align="center"><b>ER Diagram Legend (Course Style)</b></td></tr>
+        <tr><td align="left">Regular Entity</td><td>Rectangle</td></tr>
+        <tr><td align="left">Weak Entity</td><td>Double Rectangle</td></tr>
+        <tr><td align="left">Relationship</td><td>Diamond</td></tr>
+        <tr><td align="left">Identifying Relationship</td><td>Double Diamond</td></tr>
+        <tr><td align="left">Regular Attribute</td><td>Oval</td></tr>
+        <tr><td align="left">Primary Key</td><td><u>Underlined Text</u></td></tr>
+        <tr><td align="left">Total Participation</td><td><b>Thick Line</b></td></tr>
+        <tr><td align="left">Key Constraint</td><td>Arrow pointing to Diamond</td></tr>
+    </table>
+> margin=0 shape=none]
+	}
+}
