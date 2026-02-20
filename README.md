@@ -1,5 +1,6 @@
 # FootStats: European Soccer Database Project ⚽
 
+get dataset here : https://www.kaggle.com/datasets/hugomathien/soccer/data
 ---
 
 ## 📊 Project Status Update
