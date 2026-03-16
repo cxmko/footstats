@@ -1,35 +1,45 @@
-# FootStats: European Soccer Database Project ⚽
+# FootStats: European Soccer Database Architecture
+
+**Author:** Cameron Mouangue  
+**Program:** M1 Applied Mathematics and Statistics, Institut Polytechnique de Paris  
 
 ---
 
-## 📊 Project Status Update
+## Project Overview
+FootStats is a comprehensive relational database project designed to process, store, and analyze large-scale European soccer data. Built on PostgreSQL v15, the project encompasses the entire database lifecycle: from conceptual modeling and strict Data Definition Language (DDL) constraints to a custom Python ETL pipeline and advanced Data Warehousing optimization techniques.
 
-Here is a quick breakdown of what has been implemented so far and what is blocking us for the final phases. 
+## Implementation Phases
 
-### ✅ Done: Phases 1 & 2 (Modeling & DDL)
-* **Conceptual Design:** We have a clean, normalized ER Diagram (Course Style) that breaks down the massive Kaggle dataset into 4 core tables and several weak entities/relationships (like `Appearance` and `Betting_Odds`). 
-* **Database Setup:** The PostgreSQL v15 database (`footstats`) is live. 
-* **DDL Scripts:** `sql/01_schema.sql` successfully builds all the tables with proper primary/foreign key constraints.
-* **Triggers:** `sql/02_triggers.sql` is active. It automatically updates a team's `total_points` whenever a match result is inserted.
+### Phase 1 & 2: Modeling and Schema Design
+* **Conceptual Design:** The database follows a strictly normalized Entity-Relationship model, breaking down a denormalized Kaggle dataset into core reference tables (`Team`, `Player`, `Match`) and weak entities (`Appearance`, `Betting_Odds`, `Match_Event`).
+* **DDL Implementation:** `sql/01_schema.sql` establishes the database schema with rigorous Primary Key and Foreign Key constraints to ensure referential integrity.
+* **Active Database Elements:** `sql/02_triggers.sql` implements a PL/pgSQL function and trigger that automatically calculates and updates a team's `total_points` upon the insertion of match results.
 
-### 🚧 WIP: Phases 3 & 4 (Ingestion & Analytics)
-Currently, `app/main.py` (Data Ingestion) and the analytics/optimization SQL scripts are heavily WIP. 
+### Phase 3: Modular ETL and Data Ingestion
+* **Data Extraction & Transformation:** The Python application (`app/main.py`) handles the ingestion bottleneck of the raw dataset. It systematically unpivots extensive lineup arrays and parses complex XML blobs to extract granular match events (e.g., goals, fouls, cards).
+* **Data Loading:** The pipeline cleanly ingests over 1.2 million rows into the 3NF PostgreSQL schema. 
+* **CLI Interface:** A command-line interface allows users to initialize the database, execute custom SQL, verify table health, and perform a full `TRUNCATE CASCADE` teardown.
 
-**The Bottleneck:** The raw Kaggle SQLite file is a normalization nightmare. The `Match` table has 115 columns, including repeating variables for X/Y coordinates of lineups (`home_player_X1` to `X11`), and the event data (goals, cards, fouls) is trapped in massive raw XML blobs. 
-
-### 🎯 Next Steps & Game Plan
-To hit the course requirements for complex queries and optimization, we need heavy data. Here is the plan:
-
-1. **The ETL Push (Phase 3):** We need to update our Python ingestion script to actively unpivot those lineup and betting columns into our `Appearance` and `Betting_Odds` tables. 
-2. **Brute-Force the XML:** If we want the really cool statistical queries (like late-game clutch factors), we might have to brute-force parse the XML blobs in Python to populate the `Match_Event` table. 
-3. **The Analytics (Phase 4):** Once populated, we will throw 7 computationally demanding queries at the database in `sql/03_analytics.sql` (e.g., spatial impact analysis, betting arbitrages).
-4. **The B+Tree Optimization:** We will run `\timing on` to profile all queries, identify the **top 3 slowest ones** (the sequential scan offenders), and build targeted B+Tree indexes in `sql/04_indexes.sql` to drastically cut their execution time. 
-
-**⚠️ Backup Plan:** If we decide parsing the XML and unpivoting the arrays is too time-consuming, we will have to abandon the `Appearance`, `Betting_Odds`, and `Match_Event` tables. However, this means we **must redraw the ER Diagram** to reflect a simpler model and rely on basic team-level analytics. Let's discuss.
+### Phase 4: Analytics and Database Optimization
+* **Macro-Analytics:** `sql/03_analytics_test.sql` contains 7 computationally demanding analytical queries (e.g., Spatial Impact, Player Dependency, Hat-Trick Hunters). All queries strictly adhere to relational algebra paradigms, utilizing implicit Cartesian cross-product joins per course requirements.
+* **OLTP Indexing:** Targeted composite and covering B-Tree indexes were built to optimize selective queries and standard lookups.
+* **OLAP Optimization:** To overcome the inherent limitations of standard B-Trees on full-table aggregations, a Data Warehousing architecture was implemented in `sql/04_indexes.sql`. 
+* **Pre-Computed Measures:** A generalized Fact Table (`mv_player_match_stats`) was built using a `MATERIALIZED VIEW`. Window Functions (`COUNT() OVER (PARTITION BY...)`) were integrated to shift heavy aggregations to creation time. 
+* **Physical Disk Tuning:** The materialized view was physically clustered (`CLUSTER`) on disk and analyzed to guarantee optimal Query Planner routing, reducing execution times for macro-analytics from >1,000ms to <5ms.
+* **Benchmarking:** Execution profiling is automated. The optimization script safely routes detailed `EXPLAIN ANALYZE` query plans to a dedicated `log.txt` file for architectural review.
 
 ---
 
-## 📂 Repository Structure
-* `sql/` : Raw SQL files (`01_schema.sql`, `02_triggers.sql`, `03_analytics.sql`, `04_indexes.sql`).
-* `app/` : Python application for ETL and user interface.
-* `data/` : Data.
+## Repository Structure
+* `sql/`
+  * `01_schema.sql`: Table creation and integrity constraints.
+  * `02_triggers.sql`: Automated point-calculation triggers.
+  * `03_analytics_test.sql`: Formulated analytical queries.
+  * `04_indexes.sql`: B-Tree indexing, Materialized Views, and benchmarking.
+* `app/`
+  * `main.py`: Modular ETL pipeline and CLI.
+  * `db_config.py`: Database connection routing.
+* `data/`
+  * Source datasets (SQLite/CSV).
+* `log.txt`
+  * Automated diagnostic output containing physical query execution plans.

@@ -21,7 +21,7 @@ CREATE TABLE Team (
 );
 
 CREATE TABLE Player (
-    player_api_id INT PRIMARY KEY,
+    player_id INT PRIMARY KEY,
     player_name VARCHAR(255),
     birthday DATE,
     height FLOAT,
@@ -48,6 +48,7 @@ CREATE TABLE Match (
 CREATE TABLE Match_Event (
     match_api_id INT,
     event_id INT,
+    player_id INT,
     minute INT,
     event_type VARCHAR(50),
     PRIMARY KEY (match_api_id, event_id),
@@ -66,12 +67,12 @@ CREATE TABLE Betting_Odds (
 
 -- 4. Many-to-Many Relationship Table
 CREATE TABLE Appearance (
-    player_api_id INT,
+    player_id INT,
     match_api_id INT,
     is_home_team BOOLEAN,
     X_coordinate INT,
     Y_coordinate INT,
-    PRIMARY KEY (player_api_id, match_api_id),
-    FOREIGN KEY (player_api_id) REFERENCES Player(player_api_id) ON DELETE CASCADE,
+    PRIMARY KEY (player_id, match_api_id),
+    FOREIGN KEY (player_id) REFERENCES Player(player_id) ON DELETE CASCADE,
     FOREIGN KEY (match_api_id) REFERENCES Match(match_api_id) ON DELETE CASCADE
 );

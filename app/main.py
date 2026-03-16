@@ -1,104 +1,58 @@
 # app/main.py
-import sqlite3
-import psycopg2
 import sys
+import os
+import psycopg2
 
-# --- CONFIGURATION ---
-SQLITE_PATH = 'database.sqlite'
-# Replace with your actual Postgres credentials
-PG_HOST = "localhost"
-PG_PORT = "5432"
-PG_DB = "footstats"
-PG_USER = "postgres"
-PG_PASS = "1234"
+# Add the project root directory to sys.path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-def get_pg_connection():
-    """Establishes a raw connection to the PostgreSQL database."""
-    return psycopg2.connect(
-        host=PG_HOST,
-        port=PG_PORT,
-        dbname=PG_DB,
-        user=PG_USER,
-        password=PG_PASS
-    )
+from app.db_config import get_sqlite_connection, get_pg_connection
+from app.populate_reference import populate_reference_tables
+from app.populate_match import populate_match_core_and_odds
+from app.populate_events import populate_match_events
 
 def ingest_data():
-    print("Starting raw SQL data ingestion... This might take a moment.")
+    print("\n=== Initializing Modular ETL Pipeline ===")
     
-    # 1. Open basic connections
-    sqlite_conn = sqlite3.connect(SQLITE_PATH)
+    sqlite_conn = get_sqlite_connection()
     sqlite_cursor = sqlite_conn.cursor()
+    pg_conn = get_pg_connection()
+    pg_cursor = pg_conn.cursor()
+    
+    try:
+        populate_reference_tables(sqlite_cursor, pg_cursor)
+        populate_match_core_and_odds(sqlite_cursor, pg_cursor)
+        populate_match_events(sqlite_cursor, pg_cursor)
+        
+        pg_conn.commit()
+        print("\n SUCCESS: Entire database is fully populated!")
+        
+    except Exception as e:
+        pg_conn.rollback()
+        print(f"\n CRITICAL ERROR: Transaction rolled back. {e}")
+    finally:
+        sqlite_cursor.close()
+        sqlite_conn.close()
+        pg_cursor.close()
+        pg_conn.close()
+
+def check_db_health():
+    """Counts rows in core tables to verify ingestion success."""
+    print("\n--- Database Health Check ---")
+    tables = ['Country', 'League', 'Team', 'Player', 'Match', 'Appearance', 'Match_Event', 'Betting_Odds']
     
     pg_conn = get_pg_connection()
     pg_cursor = pg_conn.cursor()
     
     try:
-        # --- Extract & Load COUNTRY ---
-        print("-> Loading Country table...")
-        sqlite_cursor.execute("SELECT id, name FROM Country;")
-        countries = sqlite_cursor.fetchall() # Fetches a list of tuples
-        
-        # Raw SQL insert using psycopg2's parameterized queries
-        pg_cursor.executemany(
-            "INSERT INTO Country (id, name) VALUES (%s, %s) ON CONFLICT DO NOTHING;", 
-            countries
-        )
-        pg_conn.commit() # Must manually commit transactions!
-
-        # --- Extract & Load LEAGUE ---
-        print("-> Loading League table...")
-        sqlite_cursor.execute("SELECT id, name, country_id FROM League;")
-        leagues = sqlite_cursor.fetchall()
-        pg_cursor.executemany(
-            "INSERT INTO League (id, name, country_id) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING;", 
-            leagues
-        )
-        pg_conn.commit()
-
-        # --- Extract & Load TEAM ---
-        print("-> Loading Team table...")
-        sqlite_cursor.execute("SELECT team_api_id, team_long_name, team_short_name FROM Team;")
-        teams = sqlite_cursor.fetchall()
-        pg_cursor.executemany(
-            "INSERT INTO Team (team_api_id, team_long_name, team_short_name) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING;", 
-            teams
-        )
-        pg_conn.commit()
-
-        # --- Extract & Load PLAYER ---
-        print("-> Loading Player table...")
-        sqlite_cursor.execute("SELECT player_api_id, player_name, birthday, height, weight FROM Player;")
-        players = sqlite_cursor.fetchall()
-        pg_cursor.executemany(
-            "INSERT INTO Player (player_api_id, player_name, birthday, height, weight) VALUES (%s, %s, %s, %s, %s) ON CONFLICT DO NOTHING;", 
-            players
-        )
-        pg_conn.commit()
-
-        # --- Extract & Load MATCH ---
-        print("-> Loading Match table...")
-        sqlite_cursor.execute("""
-            SELECT match_api_id, league_id, season, date, stage, 
-                   home_team_api_id, away_team_api_id, home_team_goal, away_team_goal 
-            FROM Match;
-        """)
-        matches = sqlite_cursor.fetchall()
-        pg_cursor.executemany(
-            """INSERT INTO Match (match_api_id, league_id, season, date, stage, home_team_api_id, away_team_api_id, home_team_goal, away_team_goal) 
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING;""", 
-            matches
-        )
-        pg_conn.commit()
-        
-        print("\nSUCCESS: All data ingested using raw SQL cursors!")
-        print("Note: The triggers updated the 'total_points' for all teams!\n")
-        
-    except Exception as e:
-        pg_conn.rollback() # Rollback on error (shows good DB practices)
-        print(f"\nERROR during ingestion: {e}")
+        for table in tables:
+            pg_cursor.execute(f"SELECT COUNT(*) FROM {table};")
+            count = pg_cursor.fetchone()[0]
+            print(f"{table.ljust(15)}: {count:,} rows")
+    except psycopg2.Error as e:
+        print(f"Error reading tables: {e}")
     finally:
-        sqlite_cursor.close()
-        sqlite_conn.close()
+        print("-----------------------------\n")
         pg_cursor.close()
         pg_conn.close()
 
@@ -107,10 +61,8 @@ def search_player():
     pg_conn = get_pg_connection()
     pg_cursor = pg_conn.cursor()
     
-    # Using parameterized queries (%s) to prevent SQL Injection
     query = "SELECT player_name, birthday, height FROM Player WHERE player_name ILIKE %s LIMIT 5;"
     pg_cursor.execute(query, ('%' + name + '%',))
-    
     results = pg_cursor.fetchall()
     
     if not results:
@@ -139,23 +91,97 @@ def view_top_teams():
     pg_cursor.close()
     pg_conn.close()
 
+def execute_custom_sql():
+    """Allows the user to run raw SQL queries safely."""
+    print("\n--- Custom SQL Executor ---")
+    print("Type your SQL query below (must be on a single line). Type 'cancel' to go back.")
+    query = input("SQL> ")
+    
+    if query.strip().lower() == 'cancel':
+        return
+        
+    pg_conn = get_pg_connection()
+    pg_cursor = pg_conn.cursor()
+    
+    try:
+        pg_cursor.execute(query)
+        
+        # If it's a SELECT query, fetch and print the results
+        if pg_cursor.description:
+            # Get column names
+            colnames = [desc[0] for desc in pg_cursor.description]
+            results = pg_cursor.fetchall()
+            
+            print("\n" + " | ".join(colnames))
+            print("-" * (len(colnames) * 15))
+            
+            for row in results:
+                # Format each row item as a string, handling None (NULL) values
+                formatted_row = [str(item) if item is not None else "NULL" for item in row]
+                print(" | ".join(formatted_row))
+            print(f"\n({len(results)} rows returned)")
+            
+        else:
+            # If it's an INSERT/UPDATE/DELETE, commit it
+            pg_conn.commit()
+            print(f" Query executed successfully. {pg_cursor.rowcount} rows affected.")
+            
+    except psycopg2.Error as e:
+        # Catch SQL syntax errors so the app doesn't crash
+        pg_conn.rollback()
+        print(f"\n SQL Error: {e.pgerror}")
+    finally:
+        pg_cursor.close()
+        pg_conn.close()
+
+def reset_database():
+    """Truncates all tables to reset the database to an empty state."""
+    confirm = input(" WARNING: This will delete ALL data. Are you sure? (y/n): ")
+    if confirm.lower() != 'y':
+        print("Reset cancelled.")
+        return
+        
+    pg_conn = get_pg_connection()
+    pg_cursor = pg_conn.cursor()
+    
+    try:
+        print("Truncating tables...")
+        pg_cursor.execute("TRUNCATE TABLE Country, League, Team, Player CASCADE;")
+        pg_conn.commit()
+        print(" Database successfully reset and is ready for fresh ingestion.")
+    except psycopg2.Error as e:
+        pg_conn.rollback()
+        print(f" Error resetting database: {e}")
+    finally:
+        pg_cursor.close()
+        pg_conn.close()
+
 def main():
     while True:
         print("\n=== FootStats Application Interface ===")
-        print("1. Initialize and Ingest Kaggle Data (Raw Cursors)")
-        print("2. Search for a Player")
-        print("3. View Top Teams (Demonstrates Triggers)")
-        print("4. Exit")
+        print("1. Initialize and Ingest Kaggle Data (Full Pipeline)")
+        print("2. Database Health Check (Row Counts)")
+        print("3. Search for a Player")
+        print("4. View Top Teams (Demonstrates Triggers)")
+        print("5. Execute Custom SQL Query")
+        print("6. Reset Database (Truncate All Data)")
+        print("7. Exit")
         
-        choice = input("Select an option (1-4): ")
+        choice = input("Select an option (1-7): ")
         
         if choice == '1':
             ingest_data()
         elif choice == '2':
-            search_player()
+            check_db_health()
         elif choice == '3':
-            view_top_teams()
+            search_player()
         elif choice == '4':
+            view_top_teams()
+        elif choice == '5':
+            execute_custom_sql()
+        elif choice == '6':
+            reset_database()
+        elif choice == '7':
             print("Exiting application. Goodbye!")
             sys.exit(0)
         else:
