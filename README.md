@@ -39,7 +39,30 @@ FootStats is a comprehensive relational database project designed to process, st
 * `app/`
   * `main.py`: Modular ETL pipeline and CLI.
   * `db_config.py`: Database connection routing.
+  * `parse_xml_util.py`: XML extraction logic.
+  * `populate_*.py`: Modular ingestion scripts.
 * `data/`
   * Source datasets (SQLite/CSV).
 * `log.txt`
   * Automated diagnostic output containing physical query execution plans.
+* `requirements.txt`
+  * Python dependencies required to run the dashboard.
+* `run_windows.bat` / `run_mac.sh`
+  * Executable shortcuts to launch the application.
+
+---
+
+## How to Run the Application
+
+**1. Install Dependencies**
+Ensure you have Python installed, then install the required libraries by running the following command in your terminal from the root directory:
+```bash
+pip install -r requirements.txt
+
+**2. Launch the Dashboard**
+
+To launch the Command Line Dashboard, simply run the execution script matching your Operating System from the root directory:
+* **Windows:** Double-click `run_windows.bat`
+* **macOS / Linux:** Run `bash run_mac.sh` in your terminal.
+
+Alternatively, you can launch it manually via: `python app/main.py`

@@ -5,7 +5,7 @@
 \pset pager off
 \x auto
 
--- 1. Greatest Upset Matches (Unchanged, highly selective implicit join)
+\echo '\n-- 1. Identify matches with the smallest upset probability where the underdog won by a large margin'
 SELECT m.date,
        t1.team_long_name AS home_team, t2.team_long_name AS away_team, 
        m.home_team_goal, m.away_team_goal, 
@@ -28,7 +28,7 @@ ORDER BY upset_probability ASC
 LIMIT 15;
 
 
--- 2. The "True" Hat-Trick Hunters (Strict Implicit Joins)
+\echo '\n-- 2. Find players who have scored hat-tricks (3+ goals in a match) for multiple different teams'
 WITH HatTrickIDs AS (
     SELECT me.player_id, 
            CASE WHEN a.is_home_team = TRUE THEN m.home_team_api_id ELSE m.away_team_api_id END AS team_id
@@ -56,7 +56,7 @@ ORDER BY pa.different_teams_with_hattrick DESC, pa.total_hattricks DESC
 LIMIT 15;
 
 
--- 3. "Gaps and Islands": Longest winning streaks (Strict Implicit Joins)
+\echo '\n-- 3. Calculate the longest consecutive winning streak for each team'
 WITH MatchResults AS (
     SELECT home_team_api_id AS team_id, date,
            CASE WHEN home_team_goal > away_team_goal THEN 1 ELSE 0 END AS is_win 
@@ -81,7 +81,7 @@ ORDER BY ts.consecutive_wins DESC
 LIMIT 10;
 
 
--- 4. Spatial Impact: Central vs Wing Positioning
+\echo '\n-- 4. Compare goal-scoring efficiency based on player positioning (Central vs Wings)'
 WITH PlayerSpatialStats AS (
     SELECT a.player_id,
            CASE WHEN a.X_coordinate BETWEEN 4 AND 7 THEN 'Central Axis' ELSE 'Wings' END AS pitch_zone,
@@ -101,7 +101,7 @@ ORDER BY ps.goals DESC
 LIMIT 15;
 
 
--- 5. Financial Arbitrage: Bookmaker Margin
+\echo '\n-- 5. Calculate total implied probability from betting odds to analyze bookmaker margins'
 SELECT m.date, t1.team_long_name AS home_team, t2.team_long_name AS away_team, bo.bookmaker,
        ROUND(CAST(((1.0 / bo.home_win) + (1.0 / bo.draw) + (1.0 / bo.away_win)) * 100 AS NUMERIC), 2) AS implied_probability_sum
 FROM Betting_Odds bo, Match m, Team t1, Team t2
@@ -111,7 +111,7 @@ ORDER BY implied_probability_sum ASC
 LIMIT 15;
 
 
--- 6. The Nemesis Matrix
+\echo '\n-- 6. Identify "Nemesis" relationships: teams with exceptionally low win rates against specific opponents'
 WITH HeadToHead AS (
     SELECT home_team_api_id AS team_a, away_team_api_id AS team_b, COUNT(*) AS games_played,
            SUM(CASE WHEN home_team_goal > away_team_goal THEN 1 ELSE 0 END) AS team_a_wins
@@ -127,7 +127,7 @@ ORDER BY h2h_win_rate_percentage ASC, h2h.games_played DESC
 LIMIT 15;
 
 
--- 7. Player Dependency (Strict Implicit Joins & Mathematically Corrected)
+\echo '\n-- 7. Rank players by the number of matches played for a single team to measure dependency'
 WITH DependencyStats AS (
     SELECT a.player_id, 
            CASE WHEN a.is_home_team = TRUE THEN m.home_team_api_id ELSE m.away_team_api_id END AS team_id, 

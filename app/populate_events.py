@@ -18,7 +18,7 @@ def populate_match_events(sqlite_cursor, pg_cursor):
             extracted = extract_events_from_xml(xml_data, event_type, match_id)
             all_events.extend(extracted)
             
-# Batch insert to avoid overwhelming the memory
+
     batch_size = 10000
     for i in range(0, len(all_events), batch_size):
         pg_cursor.executemany(
