@@ -5,35 +5,35 @@
 >>> Q4: BASELINE
                                                                                     QUERY PLAN                                                                                     
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit  (cost=92919.31..92919.32 rows=5 width=62) (actual time=600.091..600.094 rows=5 loops=1)
-   ->  Sort  (cost=92919.31..93054.87 rows=54227 width=62) (actual time=600.089..600.091 rows=5 loops=1)
+ Limit  (cost=93100.19..93100.20 rows=5 width=62) (actual time=1308.175..1308.179 rows=5 loops=1)
+   ->  Sort  (cost=93100.19..93235.76 rows=54227 width=62) (actual time=1308.170..1308.173 rows=5 loops=1)
          Sort Key: (count(me.event_id)) DESC
          Sort Method: top-N heapsort  Memory: 25kB
-         ->  Hash Join  (cost=15863.32..92018.62 rows=54227 width=62) (actual time=54.891..596.987 rows=18116 loops=1)
+         ->  Hash Join  (cost=16071.97..92199.50 rows=54227 width=62) (actual time=114.405..1300.162 rows=18116 loops=1)
                Hash Cond: (a.player_id = p.player_id)
-               ->  GroupAggregate  (cost=15519.47..90990.09 rows=54227 width=52) (actual time=52.791..589.035 rows=18116 loops=1)
+               ->  GroupAggregate  (cost=15710.12..91152.98 rows=54227 width=52) (actual time=110.206..1283.495 rows=18116 loops=1)
                      Group Key: a.player_id, (CASE WHEN ((a.x_coordinate >= 4) AND (a.x_coordinate <= 7)) THEN 'Central Axis'::text ELSE 'Wings'::text END)
-                     ->  Incremental Sort  (cost=15519.47..84893.74 rows=528295 width=44) (actual time=52.767..492.958 rows=532021 loops=1)
+                     ->  Incremental Sort  (cost=15710.12..85056.08 rows=528349 width=44) (actual time=110.166..1057.796 rows=532021 loops=1)
                            Sort Key: a.player_id, (CASE WHEN ((a.x_coordinate >= 4) AND (a.x_coordinate <= 7)) THEN 'Central Axis'::text ELSE 'Wings'::text END)
                            Presorted Key: a.player_id
                            Full-sort Groups: 6226  Sort Method: quicksort  Average Memory: 29kB  Peak Memory: 29kB
                            Pre-sorted Groups: 5564  Sort Method: quicksort  Average Memory: 26kB  Peak Memory: 26kB
-                           ->  Merge Left Join  (cost=15511.75..51218.98 rows=528295 width=44) (actual time=52.654..354.003 rows=532021 loops=1)
+                           ->  Merge Left Join  (cost=15702.51..51448.14 rows=528349 width=44) (actual time=109.968..729.347 rows=532021 loops=1)
                                  Merge Cond: ((a.player_id = me.player_id) AND (a.match_api_id = me.match_api_id))
-                                 ->  Index Scan using appearance_pkey on appearance a  (cost=0.42..30139.09 rows=528295 width=12) (actual time=0.045..226.604 rows=527612 loops=1)
+                                 ->  Index Scan using appearance_pkey on appearance a  (cost=0.42..30162.23 rows=528349 width=12) (actual time=0.071..444.627 rows=527612 loops=1)
                                        Filter: (x_coordinate IS NOT NULL)
                                        Rows Removed by Filter: 14655
-                                 ->  Sort  (cost=15511.33..15609.46 rows=39254 width=12) (actual time=52.596..58.030 rows=39864 loops=1)
+                                 ->  Sort  (cost=15702.06..15805.95 rows=41556 width=12) (actual time=109.873..118.344 rows=39666 loops=1)
                                        Sort Key: me.player_id, me.match_api_id
-                                       Sort Method: quicksort  Memory: 3415kB
-                                       ->  Seq Scan on match_event me  (cost=0.00..12516.14 rows=39254 width=12) (actual time=0.011..41.508 rows=39980 loops=1)
+                                       Sort Method: quicksort  Memory: 3414kB
+                                       ->  Seq Scan on match_event me  (cost=0.00..12514.14 rows=41556 width=12) (actual time=0.021..86.682 rows=39980 loops=1)
                                              Filter: ((event_type)::text = 'goal'::text)
                                              Rows Removed by Filter: 611711
-               ->  Hash  (cost=205.60..205.60 rows=11060 width=18) (actual time=2.050..2.050 rows=11060 loops=1)
+               ->  Hash  (cost=223.60..223.60 rows=11060 width=18) (actual time=4.118..4.119 rows=11060 loops=1)
                      Buckets: 16384  Batches: 1  Memory Usage: 691kB
-                     ->  Seq Scan on player p  (cost=0.00..205.60 rows=11060 width=18) (actual time=0.010..0.851 rows=11060 loops=1)
- Planning Time: 0.712 ms
- Execution Time: 601.134 ms
+                     ->  Seq Scan on player p  (cost=0.00..223.60 rows=11060 width=18) (actual time=0.038..1.639 rows=11060 loops=1)
+ Planning Time: 1.713 ms
+ Execution Time: 1309.790 ms
 (29 rows)
 
 CREATE INDEX
@@ -42,64 +42,64 @@ ANALYZE
 ANALYZE
 
 >>> Q4: INDEXED
-                                                                                       QUERY PLAN                                                                                        
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit  (cost=65904.84..65904.85 rows=5 width=62) (actual time=399.592..399.595 rows=5 loops=1)
-   ->  Sort  (cost=65904.84..66040.41 rows=54227 width=62) (actual time=399.591..399.593 rows=5 loops=1)
+                                                                                          QUERY PLAN                                                                                           
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=65937.26..65937.27 rows=5 width=62) (actual time=984.413..984.417 rows=5 loops=1)
+   ->  Sort  (cost=65937.26..66072.82 rows=54227 width=62) (actual time=984.412..984.415 rows=5 loops=1)
          Sort Key: (count(me.event_id)) DESC
          Sort Method: top-N heapsort  Memory: 25kB
-         ->  Hash Join  (cost=350.82..65004.15 rows=54227 width=62) (actual time=2.111..396.243 rows=18116 loops=1)
+         ->  Hash Join  (cost=368.84..65036.57 rows=54227 width=62) (actual time=4.369..975.707 rows=18116 loops=1)
                Hash Cond: (a.player_id = p.player_id)
-               ->  GroupAggregate  (cost=6.97..63975.63 rows=54227 width=52) (actual time=0.141..387.972 rows=18116 loops=1)
+               ->  GroupAggregate  (cost=6.99..63990.04 rows=54227 width=52) (actual time=0.224..958.746 rows=18116 loops=1)
                      Group Key: a.player_id, (CASE WHEN ((a.x_coordinate >= 4) AND (a.x_coordinate <= 7)) THEN 'Central Axis'::text ELSE 'Wings'::text END)
-                     ->  Incremental Sort  (cost=6.97..57889.94 rows=527228 width=44) (actual time=0.130..289.512 rows=532021 loops=1)
+                     ->  Incremental Sort  (cost=6.99..57905.99 rows=527065 width=44) (actual time=0.196..714.625 rows=532021 loops=1)
                            Sort Key: a.player_id, (CASE WHEN ((a.x_coordinate >= 4) AND (a.x_coordinate <= 7)) THEN 'Central Axis'::text ELSE 'Wings'::text END)
                            Presorted Key: a.player_id
                            Full-sort Groups: 6226  Sort Method: quicksort  Average Memory: 29kB  Peak Memory: 29kB
                            Pre-sorted Groups: 5564  Sort Method: quicksort  Average Memory: 26kB  Peak Memory: 26kB
-                           ->  Merge Left Join  (cost=0.71..24323.33 rows=527228 width=44) (actual time=0.086..150.903 rows=532021 loops=1)
+                           ->  Merge Left Join  (cost=0.71..24331.52 rows=527065 width=44) (actual time=0.106..372.645 rows=532021 loops=1)
                                  Merge Cond: ((a.player_id = me.player_id) AND (a.match_api_id = me.match_api_id))
-                                 ->  Index Only Scan using idx_q4_appearance on appearance a  (cost=0.42..17691.71 rows=527228 width=12) (actual time=0.011..81.537 rows=527612 loops=1)
+                                 ->  Index Only Scan using demo_idx_q4_appearance on appearance a  (cost=0.42..17690.08 rows=527065 width=12) (actual time=0.027..209.314 rows=527612 loops=1)
                                        Index Cond: (x_coordinate IS NOT NULL)
                                        Heap Fetches: 0
-                                 ->  Index Only Scan using idx_q4_matchevent on match_event me  (cost=0.29..1211.13 rows=39123 width=12) (actual time=0.073..6.907 rows=39864 loops=1)
+                                 ->  Index Only Scan using demo_idx_q4_matchevent on match_event me  (cost=0.29..1228.41 rows=40275 width=12) (actual time=0.075..12.250 rows=39666 loops=1)
                                        Heap Fetches: 0
-               ->  Hash  (cost=205.60..205.60 rows=11060 width=18) (actual time=1.925..1.925 rows=11060 loops=1)
+               ->  Hash  (cost=223.60..223.60 rows=11060 width=18) (actual time=4.039..4.040 rows=11060 loops=1)
                      Buckets: 16384  Batches: 1  Memory Usage: 691kB
-                     ->  Seq Scan on player p  (cost=0.00..205.60 rows=11060 width=18) (actual time=0.010..0.808 rows=11060 loops=1)
- Planning Time: 1.103 ms
- Execution Time: 399.719 ms
+                     ->  Seq Scan on player p  (cost=0.00..223.60 rows=11060 width=18) (actual time=0.031..1.685 rows=11060 loops=1)
+ Planning Time: 1.863 ms
+ Execution Time: 984.623 ms
 (25 rows)
 
 
 >>> Q7: BASELINE
                                                                        QUERY PLAN                                                                       
 --------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit  (cost=75804.51..75804.52 rows=5 width=35) (actual time=274.191..274.196 rows=5 loops=1)
-   ->  Sort  (cost=75804.51..77160.18 rows=542267 width=35) (actual time=274.190..274.194 rows=5 loops=1)
+ Limit  (cost=75824.51..75824.52 rows=5 width=35) (actual time=529.015..529.022 rows=5 loops=1)
+   ->  Sort  (cost=75824.51..77180.18 rows=542267 width=35) (actual time=529.014..529.020 rows=5 loops=1)
          Sort Key: (count(m.match_api_id)) DESC
          Sort Method: top-N heapsort  Memory: 25kB
-         ->  Hash Join  (cost=47789.11..66797.65 rows=542267 width=35) (actual time=259.227..271.215 rows=18544 loops=1)
+         ->  Hash Join  (cost=47809.11..66817.65 rows=542267 width=35) (actual time=506.370..524.407 rows=18544 loops=1)
                Hash Cond: ((CASE WHEN a.is_home_team THEN m.home_team_api_id ELSE m.away_team_api_id END) = t.team_api_id)
-               ->  Hash Join  (cost=47552.38..65117.29 rows=542267 width=26) (actual time=258.995..267.721 rows=18544 loops=1)
+               ->  Hash Join  (cost=47570.38..65135.29 rows=542267 width=26) (actual time=506.078..518.766 rows=18544 loops=1)
                      Hash Cond: (a.player_id = p.player_id)
-                     ->  HashAggregate  (cost=47208.53..57926.78 rows=542267 width=16) (actual time=256.657..260.938 rows=18544 loops=1)
+                     ->  HashAggregate  (cost=47208.53..57926.78 rows=542267 width=16) (actual time=501.547..507.489 rows=18544 loops=1)
                            Group Key: a.player_id, CASE WHEN a.is_home_team THEN m.home_team_api_id ELSE m.away_team_api_id END
                            Planned Partitions: 8  Batches: 1  Memory Usage: 4625kB
-                           ->  Hash Join  (cost=827.53..11113.88 rows=542267 width=12) (actual time=6.572..156.963 rows=542267 loops=1)
+                           ->  Hash Join  (cost=827.53..11113.88 rows=542267 width=12) (actual time=10.612..307.980 rows=542267 loops=1)
                                  Hash Cond: (a.match_api_id = m.match_api_id)
-                                 ->  Seq Scan on appearance a  (cost=0.00..8862.67 rows=542267 width=9) (actual time=0.013..32.406 rows=542267 loops=1)
-                                 ->  Hash  (cost=502.79..502.79 rows=25979 width=12) (actual time=6.454..6.455 rows=25979 loops=1)
+                                 ->  Seq Scan on appearance a  (cost=0.00..8862.67 rows=542267 width=9) (actual time=0.023..63.092 rows=542267 loops=1)
+                                 ->  Hash  (cost=502.79..502.79 rows=25979 width=12) (actual time=10.455..10.457 rows=25979 loops=1)
                                        Buckets: 32768  Batches: 1  Memory Usage: 1373kB
-                                       ->  Seq Scan on match m  (cost=0.00..502.79 rows=25979 width=12) (actual time=0.040..3.209 rows=25979 loops=1)
-                     ->  Hash  (cost=205.60..205.60 rows=11060 width=18) (actual time=2.294..2.294 rows=11060 loops=1)
+                                       ->  Seq Scan on match m  (cost=0.00..502.79 rows=25979 width=12) (actual time=0.016..5.351 rows=25979 loops=1)
+                     ->  Hash  (cost=223.60..223.60 rows=11060 width=18) (actual time=4.442..4.443 rows=11060 loops=1)
                            Buckets: 16384  Batches: 1  Memory Usage: 691kB
-                           ->  Seq Scan on player p  (cost=0.00..205.60 rows=11060 width=18) (actual time=0.008..0.946 rows=11060 loops=1)
-               ->  Hash  (cost=232.99..232.99 rows=299 width=17) (actual time=0.229..0.229 rows=299 loops=1)
+                           ->  Seq Scan on player p  (cost=0.00..223.60 rows=11060 width=18) (actual time=0.020..1.923 rows=11060 loops=1)
+               ->  Hash  (cost=234.99..234.99 rows=299 width=17) (actual time=0.282..0.283 rows=299 loops=1)
                      Buckets: 1024  Batches: 1  Memory Usage: 23kB
-                     ->  Seq Scan on team t  (cost=0.00..232.99 rows=299 width=17) (actual time=0.014..0.180 rows=299 loops=1)
- Planning Time: 1.081 ms
- Execution Time: 275.700 ms
+                     ->  Seq Scan on team t  (cost=0.00..234.99 rows=299 width=17) (actual time=0.027..0.217 rows=299 loops=1)
+ Planning Time: 0.987 ms
+ Execution Time: 530.890 ms
 (25 rows)
 
 CREATE INDEX
@@ -110,74 +110,74 @@ ANALYZE
 >>> Q7: FAILED INDEX
                                                                        QUERY PLAN                                                                       
 --------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit  (cost=75804.51..75804.52 rows=5 width=35) (actual time=279.785..279.790 rows=5 loops=1)
-   ->  Sort  (cost=75804.51..77160.18 rows=542267 width=35) (actual time=279.769..279.772 rows=5 loops=1)
+ Limit  (cost=75824.51..75824.52 rows=5 width=35) (actual time=475.632..475.651 rows=5 loops=1)
+   ->  Sort  (cost=75824.51..77180.18 rows=542267 width=35) (actual time=475.630..475.648 rows=5 loops=1)
          Sort Key: (count(m.match_api_id)) DESC
          Sort Method: top-N heapsort  Memory: 25kB
-         ->  Hash Join  (cost=47789.11..66797.65 rows=542267 width=35) (actual time=264.622..276.707 rows=18544 loops=1)
+         ->  Hash Join  (cost=47809.11..66817.65 rows=542267 width=35) (actual time=451.711..470.817 rows=18544 loops=1)
                Hash Cond: ((CASE WHEN a.is_home_team THEN m.home_team_api_id ELSE m.away_team_api_id END) = t.team_api_id)
-               ->  Hash Join  (cost=47552.38..65117.29 rows=542267 width=26) (actual time=264.276..273.137 rows=18544 loops=1)
+               ->  Hash Join  (cost=47570.38..65135.29 rows=542267 width=26) (actual time=451.330..465.024 rows=18544 loops=1)
                      Hash Cond: (a.player_id = p.player_id)
-                     ->  HashAggregate  (cost=47208.53..57926.78 rows=542267 width=16) (actual time=260.997..265.142 rows=18544 loops=1)
+                     ->  HashAggregate  (cost=47208.53..57926.78 rows=542267 width=16) (actual time=447.331..453.825 rows=18544 loops=1)
                            Group Key: a.player_id, CASE WHEN a.is_home_team THEN m.home_team_api_id ELSE m.away_team_api_id END
                            Planned Partitions: 8  Batches: 1  Memory Usage: 4625kB
-                           ->  Hash Join  (cost=827.53..11113.88 rows=542267 width=12) (actual time=8.562..161.314 rows=542267 loops=1)
+                           ->  Hash Join  (cost=827.53..11113.88 rows=542267 width=12) (actual time=11.354..275.991 rows=542267 loops=1)
                                  Hash Cond: (a.match_api_id = m.match_api_id)
-                                 ->  Seq Scan on appearance a  (cost=0.00..8862.67 rows=542267 width=9) (actual time=0.015..32.722 rows=542267 loops=1)
-                                 ->  Hash  (cost=502.79..502.79 rows=25979 width=12) (actual time=8.443..8.444 rows=25979 loops=1)
+                                 ->  Seq Scan on appearance a  (cost=0.00..8862.67 rows=542267 width=9) (actual time=0.013..55.806 rows=542267 loops=1)
+                                 ->  Hash  (cost=502.79..502.79 rows=25979 width=12) (actual time=11.178..11.179 rows=25979 loops=1)
                                        Buckets: 32768  Batches: 1  Memory Usage: 1373kB
-                                       ->  Seq Scan on match m  (cost=0.00..502.79 rows=25979 width=12) (actual time=0.012..4.361 rows=25979 loops=1)
-                     ->  Hash  (cost=205.60..205.60 rows=11060 width=18) (actual time=3.229..3.229 rows=11060 loops=1)
+                                       ->  Seq Scan on match m  (cost=0.00..502.79 rows=25979 width=12) (actual time=0.011..5.914 rows=25979 loops=1)
+                     ->  Hash  (cost=223.60..223.60 rows=11060 width=18) (actual time=3.906..3.918 rows=11060 loops=1)
                            Buckets: 16384  Batches: 1  Memory Usage: 691kB
-                           ->  Seq Scan on player p  (cost=0.00..205.60 rows=11060 width=18) (actual time=0.010..1.422 rows=11060 loops=1)
-               ->  Hash  (cost=232.99..232.99 rows=299 width=17) (actual time=0.267..0.267 rows=299 loops=1)
+                           ->  Seq Scan on player p  (cost=0.00..223.60 rows=11060 width=18) (actual time=0.024..1.629 rows=11060 loops=1)
+               ->  Hash  (cost=234.99..234.99 rows=299 width=17) (actual time=0.362..0.363 rows=299 loops=1)
                      Buckets: 1024  Batches: 1  Memory Usage: 23kB
-                     ->  Seq Scan on team t  (cost=0.00..232.99 rows=299 width=17) (actual time=0.018..0.211 rows=299 loops=1)
- Planning Time: 0.754 ms
- Execution Time: 281.612 ms
+                     ->  Seq Scan on team t  (cost=0.00..234.99 rows=299 width=17) (actual time=0.035..0.262 rows=299 loops=1)
+ Planning Time: 1.158 ms
+ Execution Time: 478.242 ms
 (25 rows)
 
 
 >>> Q2: BASELINE
                                                                                           QUERY PLAN                                                                                           
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit  (cost=20568.19..20568.21 rows=5 width=30) (actual time=305.072..328.581 rows=5 loops=1)
-   ->  Sort  (cost=20568.19..20568.28 rows=35 width=30) (actual time=305.071..328.580 rows=5 loops=1)
+ Limit  (cost=20576.73..20576.74 rows=5 width=30) (actual time=376.222..422.527 rows=5 loops=1)
+   ->  Sort  (cost=20576.73..20576.81 rows=35 width=30) (actual time=376.221..422.524 rows=5 loops=1)
          Sort Key: (count(DISTINCT (CASE WHEN a.is_home_team THEN m.home_team_api_id ELSE m.away_team_api_id END))) DESC, (count(*)) DESC
          Sort Method: top-N heapsort  Memory: 25kB
-         ->  Nested Loop  (cost=20322.66..20567.61 rows=35 width=30) (actual time=285.857..328.450 rows=242 loops=1)
-               ->  GroupAggregate  (cost=20322.37..20336.67 rows=35 width=20) (actual time=285.835..327.295 rows=242 loops=1)
+         ->  Nested Loop  (cost=20327.18..20576.15 rows=35 width=30) (actual time=347.447..422.387 rows=242 loops=1)
+               ->  GroupAggregate  (cost=20326.89..20341.21 rows=35 width=20) (actual time=347.411..421.075 rows=242 loops=1)
                      Group Key: me.player_id
-                     ->  Finalize GroupAggregate  (cost=20322.37..20335.71 rows=35 width=12) (actual time=285.756..326.432 rows=517 loops=1)
+                     ->  Finalize GroupAggregate  (cost=20326.89..20340.24 rows=35 width=12) (actual time=347.231..420.249 rows=517 loops=1)
                            Group Key: me.player_id, (CASE WHEN a.is_home_team THEN m.home_team_api_id ELSE m.away_team_api_id END), m.match_api_id
                            Filter: (count(me.event_id) >= 3)
                            Rows Removed by Filter: 30447
-                           ->  Gather Merge  (cost=20322.37..20333.52 rows=88 width=20) (actual time=285.712..319.305 rows=30971 loops=1)
+                           ->  Gather Merge  (cost=20326.89..20338.04 rows=88 width=20) (actual time=347.151..408.646 rows=30967 loops=1)
                                  Workers Planned: 2
                                  Workers Launched: 2
-                                 ->  Partial GroupAggregate  (cost=19322.35..19323.34 rows=44 width=20) (actual time=256.711..260.937 rows=10324 loops=3)
+                                 ->  Partial GroupAggregate  (cost=19326.87..19327.86 rows=44 width=20) (actual time=284.850..292.093 rows=10322 loops=3)
                                        Group Key: me.player_id, (CASE WHEN a.is_home_team THEN m.home_team_api_id ELSE m.away_team_api_id END), m.match_api_id
-                                       ->  Sort  (cost=19322.35..19322.46 rows=44 width=16) (actual time=256.706..257.772 rows=11792 loops=3)
+                                       ->  Sort  (cost=19326.87..19326.98 rows=44 width=16) (actual time=284.842..286.138 rows=11792 loops=3)
                                              Sort Key: me.player_id, (CASE WHEN a.is_home_team THEN m.home_team_api_id ELSE m.away_team_api_id END), m.match_api_id
-                                             Sort Method: quicksort  Memory: 1054kB
-                                             Worker 0:  Sort Method: quicksort  Memory: 1080kB
-                                             Worker 1:  Sort Method: quicksort  Memory: 954kB
-                                             ->  Nested Loop  (cost=10192.91..19321.15 rows=44 width=16) (actual time=122.867..252.466 rows=11792 loops=3)
+                                             Sort Method: quicksort  Memory: 920kB
+                                             Worker 0:  Sort Method: quicksort  Memory: 1156kB
+                                             Worker 1:  Sort Method: quicksort  Memory: 1012kB
+                                             ->  Nested Loop  (cost=10192.91..19325.67 rows=44 width=16) (actual time=209.864..277.579 rows=11792 loops=3)
                                                    Join Filter: (me.match_api_id = m.match_api_id)
-                                                   ->  Parallel Hash Join  (cost=10192.62..19306.43 rows=46 width=17) (actual time=122.813..235.034 rows=11792 loops=3)
+                                                   ->  Parallel Hash Join  (cost=10192.62..19310.95 rows=46 width=17) (actual time=209.798..244.598 rows=11792 loops=3)
                                                          Hash Cond: ((me.match_api_id = a.match_api_id) AND (me.player_id = a.player_id))
-                                                         ->  Parallel Seq Scan on match_event me  (cost=0.00..7764.22 rows=16301 width=12) (actual time=0.025..19.583 rows=13327 loops=3)
+                                                         ->  Parallel Seq Scan on match_event me  (cost=0.00..7762.22 rows=16781 width=12) (actual time=0.036..34.780 rows=13327 loops=3)
                                                                Filter: ((event_type)::text = 'goal'::text)
                                                                Rows Removed by Filter: 203904
-                                                         ->  Parallel Hash  (cost=5699.45..5699.45 rows=225945 width=9) (actual time=61.305..61.306 rows=180756 loops=3)
-                                                               Buckets: 262144  Batches: 8  Memory Usage: 5312kB
-                                                               ->  Parallel Seq Scan on appearance a  (cost=0.00..5699.45 rows=225945 width=9) (actual time=0.009..21.595 rows=180756 loops=3)
-                                                   ->  Index Scan using match_pkey on match m  (cost=0.29..0.31 rows=1 width=12) (actual time=0.001..0.001 rows=1 loops=35375)
+                                                         ->  Parallel Hash  (cost=5699.45..5699.45 rows=225945 width=9) (actual time=109.412..109.413 rows=180756 loops=3)
+                                                               Buckets: 262144  Batches: 8  Memory Usage: 5248kB
+                                                               ->  Parallel Seq Scan on appearance a  (cost=0.00..5699.45 rows=225945 width=9) (actual time=0.017..38.635 rows=180756 loops=3)
+                                                   ->  Index Scan using match_pkey on match m  (cost=0.29..0.31 rows=1 width=12) (actual time=0.002..0.002 rows=1 loops=35375)
                                                          Index Cond: (match_api_id = a.match_api_id)
-               ->  Index Scan using player_pkey on player p  (cost=0.29..6.59 rows=1 width=18) (actual time=0.004..0.004 rows=1 loops=242)
+               ->  Index Scan using player_pkey on player p  (cost=0.29..6.70 rows=1 width=18) (actual time=0.004..0.004 rows=1 loops=242)
                      Index Cond: (player_id = me.player_id)
- Planning Time: 3.121 ms
- Execution Time: 328.894 ms
+ Planning Time: 3.355 ms
+ Execution Time: 422.880 ms
 (37 rows)
 
 CREATE INDEX
@@ -186,76 +186,76 @@ ANALYZE
 >>> Q2: FAILED INDEX
                                                                                              QUERY PLAN                                                                                             
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit  (cost=18199.17..18199.18 rows=5 width=30) (actual time=303.563..328.612 rows=5 loops=1)
-   ->  Sort  (cost=18199.17..18199.26 rows=36 width=30) (actual time=303.562..328.611 rows=5 loops=1)
+ Limit  (cost=18148.72..18148.73 rows=5 width=30) (actual time=328.789..372.635 rows=5 loops=1)
+   ->  Sort  (cost=18148.72..18148.80 rows=34 width=30) (actual time=328.788..372.632 rows=5 loops=1)
          Sort Key: (count(DISTINCT (CASE WHEN a.is_home_team THEN m.home_team_api_id ELSE m.away_team_api_id END))) DESC, (count(*)) DESC
          Sort Method: top-N heapsort  Memory: 25kB
-         ->  Nested Loop  (cost=17944.97..18198.57 rows=36 width=30) (actual time=284.477..328.508 rows=242 loops=1)
-               ->  GroupAggregate  (cost=17944.68..17959.32 rows=36 width=20) (actual time=284.450..327.632 rows=242 loops=1)
+         ->  Nested Loop  (cost=17903.84..18148.15 rows=34 width=30) (actual time=301.306..372.519 rows=242 loops=1)
+               ->  GroupAggregate  (cost=17903.55..17917.53 rows=34 width=20) (actual time=301.285..371.565 rows=242 loops=1)
                      Group Key: me.player_id
-                     ->  Finalize GroupAggregate  (cost=17944.68..17958.33 rows=36 width=12) (actual time=284.319..326.947 rows=517 loops=1)
+                     ->  Finalize GroupAggregate  (cost=17903.55..17916.59 rows=34 width=12) (actual time=301.134..370.877 rows=517 loops=1)
                            Group Key: me.player_id, (CASE WHEN a.is_home_team THEN m.home_team_api_id ELSE m.away_team_api_id END), m.match_api_id
                            Filter: (count(me.event_id) >= 3)
                            Rows Removed by Filter: 30447
-                           ->  Gather Merge  (cost=17944.68..17956.08 rows=90 width=20) (actual time=284.277..319.403 rows=30969 loops=1)
+                           ->  Gather Merge  (cost=17903.55..17914.45 rows=86 width=20) (actual time=301.077..360.583 rows=30980 loops=1)
                                  Workers Planned: 2
                                  Workers Launched: 2
-                                 ->  Partial GroupAggregate  (cost=16944.66..16945.67 rows=45 width=20) (actual time=254.156..258.217 rows=10323 loops=3)
+                                 ->  Partial GroupAggregate  (cost=16903.53..16904.50 rows=43 width=20) (actual time=230.018..237.221 rows=10327 loops=3)
                                        Group Key: me.player_id, (CASE WHEN a.is_home_team THEN m.home_team_api_id ELSE m.away_team_api_id END), m.match_api_id
-                                       ->  Sort  (cost=16944.66..16944.77 rows=45 width=16) (actual time=254.151..255.109 rows=11792 loops=3)
+                                       ->  Sort  (cost=16903.53..16903.64 rows=43 width=16) (actual time=230.011..231.559 rows=11792 loops=3)
                                              Sort Key: me.player_id, (CASE WHEN a.is_home_team THEN m.home_team_api_id ELSE m.away_team_api_id END), m.match_api_id
-                                             Sort Method: quicksort  Memory: 1019kB
-                                             Worker 0:  Sort Method: quicksort  Memory: 1010kB
-                                             Worker 1:  Sort Method: quicksort  Memory: 1059kB
-                                             ->  Nested Loop  (cost=10993.12..16943.42 rows=45 width=16) (actual time=113.305..250.053 rows=11792 loops=3)
+                                             Sort Method: quicksort  Memory: 1138kB
+                                             Worker 0:  Sort Method: quicksort  Memory: 1013kB
+                                             Worker 1:  Sort Method: quicksort  Memory: 937kB
+                                             ->  Nested Loop  (cost=10967.86..16902.36 rows=43 width=16) (actual time=162.320..222.924 rows=11792 loops=3)
                                                    Join Filter: (me.match_api_id = m.match_api_id)
-                                                   ->  Parallel Hash Join  (cost=10992.84..16928.38 rows=47 width=17) (actual time=113.260..232.932 rows=11792 loops=3)
+                                                   ->  Parallel Hash Join  (cost=10967.57..16888.28 rows=44 width=17) (actual time=162.254..193.341 rows=11792 loops=3)
                                                          Hash Cond: ((me.match_api_id = a.match_api_id) AND (me.player_id = a.player_id))
-                                                         ->  Parallel Bitmap Heap Scan on match_event me  (cost=800.22..5379.75 rows=16763 width=12) (actual time=4.237..11.275 rows=13327 loops=3)
+                                                         ->  Parallel Bitmap Heap Scan on match_event me  (cost=774.95..5346.27 rows=16265 width=12) (actual time=7.183..20.084 rows=13327 loops=3)
                                                                Recheck Cond: ((event_type)::text = 'goal'::text)
-                                                               Heap Blocks: exact=1745
-                                                               ->  Bitmap Index Scan on idx_fail_me_q2  (cost=0.00..790.16 rows=40231 width=0) (actual time=3.813..3.813 rows=39980 loops=1)
+                                                               Heap Blocks: exact=1998
+                                                               ->  Bitmap Index Scan on demo_idx_fail_me_q2  (cost=0.00..765.19 rows=39036 width=0) (actual time=6.272..6.272 rows=39980 loops=1)
                                                                      Index Cond: ((event_type)::text = 'goal'::text)
-                                                         ->  Parallel Hash  (cost=5699.45..5699.45 rows=225945 width=9) (actual time=58.932..58.932 rows=180756 loops=3)
-                                                               Buckets: 262144  Batches: 8  Memory Usage: 5312kB
-                                                               ->  Parallel Seq Scan on appearance a  (cost=0.00..5699.45 rows=225945 width=9) (actual time=0.010..19.796 rows=180756 loops=3)
-                                                   ->  Index Scan using match_pkey on match m  (cost=0.29..0.31 rows=1 width=12) (actual time=0.001..0.001 rows=1 loops=35375)
+                                                         ->  Parallel Hash  (cost=5699.45..5699.45 rows=225945 width=9) (actual time=107.669..107.670 rows=180756 loops=3)
+                                                               Buckets: 262144  Batches: 8  Memory Usage: 5280kB
+                                                               ->  Parallel Seq Scan on appearance a  (cost=0.00..5699.45 rows=225945 width=9) (actual time=0.016..36.813 rows=180756 loops=3)
+                                                   ->  Index Scan using match_pkey on match m  (cost=0.29..0.31 rows=1 width=12) (actual time=0.002..0.002 rows=1 loops=35375)
                                                          Index Cond: (match_api_id = a.match_api_id)
-               ->  Index Scan using player_pkey on player p  (cost=0.29..6.64 rows=1 width=18) (actual time=0.003..0.003 rows=1 loops=242)
+               ->  Index Scan using player_pkey on player p  (cost=0.29..6.77 rows=1 width=18) (actual time=0.003..0.003 rows=1 loops=242)
                      Index Cond: (player_id = me.player_id)
- Planning Time: 0.983 ms
- Execution Time: 328.857 ms
+ Planning Time: 1.774 ms
+ Execution Time: 373.133 ms
 (39 rows)
 
 
 >>> Q7: PRE-COMPUTED VIEW
-                                                                               QUERY PLAN                                                                                
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit  (cost=0.42..2.98 rows=5 width=35) (actual time=0.078..0.433 rows=5 loops=1)
-   ->  Group  (cost=0.42..27701.33 rows=54227 width=35) (actual time=0.077..0.432 rows=5 loops=1)
+                                                                                    QUERY PLAN                                                                                     
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.42..2.98 rows=5 width=35) (actual time=0.121..0.980 rows=5 loops=1)
+   ->  Group  (cost=0.42..27701.30 rows=54227 width=35) (actual time=0.120..0.977 rows=5 loops=1)
          Group Key: total_matches_for_team, player_name, team_name
-         ->  Index Only Scan using idx_mv_q7_superfast on mv_player_match_stats  (cost=0.42..23634.33 rows=542267 width=35) (actual time=0.076..0.321 rows=1126 loops=1)
+         ->  Index Only Scan using demo_idx_mv_q7_superfast on demo_mv_player_match_stats  (cost=0.42..23634.29 rows=542267 width=35) (actual time=0.118..0.644 rows=1126 loops=1)
                Heap Fetches: 1126
- Planning Time: 0.324 ms
- Execution Time: 0.451 ms
+ Planning Time: 0.441 ms
+ Execution Time: 1.005 ms
 (7 rows)
 
 
 >>> Q2: PRE-COMPUTED VIEW
-                                                                                QUERY PLAN                                                                                 
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit  (cost=1229.47..1229.48 rows=5 width=34) (actual time=4.901..4.902 rows=5 loops=1)
-   ->  Sort  (cost=1229.47..1230.81 rows=537 width=34) (actual time=4.900..4.900 rows=5 loops=1)
-         Sort Key: (count(DISTINCT mv_player_match_stats.team_name)) DESC, (count(*)) DESC
+                                                                                     QUERY PLAN                                                                                     
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=789.92..789.94 rows=5 width=34) (actual time=8.398..8.400 rows=5 loops=1)
+   ->  Sort  (cost=789.92..790.78 rows=342 width=34) (actual time=8.396..8.397 rows=5 loops=1)
+         Sort Key: (count(DISTINCT demo_mv_player_match_stats.team_name)) DESC, (count(*)) DESC
          Sort Method: top-N heapsort  Memory: 25kB
-         ->  GroupAggregate  (cost=1208.45..1220.55 rows=537 width=34) (actual time=4.281..4.839 rows=242 loops=1)
-               Group Key: mv_player_match_stats.player_id, mv_player_match_stats.player_name
-               ->  Sort  (cost=1208.45..1209.79 rows=539 width=31) (actual time=4.260..4.287 rows=517 loops=1)
-                     Sort Key: mv_player_match_stats.player_id, mv_player_match_stats.player_name
+         ->  GroupAggregate  (cost=776.54..784.24 rows=342 width=34) (actual time=7.353..8.267 rows=242 loops=1)
+               Group Key: demo_mv_player_match_stats.player_id, demo_mv_player_match_stats.player_name
+               ->  Sort  (cost=776.54..777.39 rows=343 width=31) (actual time=7.303..7.349 rows=517 loops=1)
+                     Sort Key: demo_mv_player_match_stats.player_id, demo_mv_player_match_stats.player_name
                      Sort Method: quicksort  Memory: 63kB
-                     ->  Index Scan using idx_mv_goals_search on mv_player_match_stats  (cost=0.42..1183.99 rows=539 width=31) (actual time=0.016..4.008 rows=517 loops=1)
+                     ->  Index Scan using demo_idx_mv_goals_search on demo_mv_player_match_stats  (cost=0.42..762.09 rows=343 width=31) (actual time=0.116..6.890 rows=517 loops=1)
                            Index Cond: (goals_scored >= 3)
- Planning Time: 0.380 ms
- Execution Time: 4.934 ms
+ Planning Time: 0.238 ms
+ Execution Time: 8.471 ms
 (13 rows)
 

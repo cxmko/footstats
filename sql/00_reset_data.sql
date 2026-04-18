@@ -1,4 +1,7 @@
 -- sql/00_reset_data.sql
--- Instantly vaporizes all data across all tables while preserving the schema and triggers.
+-- Instantly vaporizes the entire schema (tables, views, triggers, and all data).
+-- The Python application's ETL pipeline is designed to detect this empty state
+-- and will automatically rebuild the architecture from scratch upon next launch.
 
-TRUNCATE TABLE Country, League, Team, Player CASCADE;
+DROP SCHEMA public CASCADE;
+CREATE SCHEMA public;

@@ -4,6 +4,7 @@ import os
 import platform
 import shutil
 import psycopg2
+import csv
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -46,9 +47,7 @@ def display_intro():
     )
     console.print(Panel(intro_text, title="[System Architecture]", border_style="cyan"))
 
-# =====================================================================
-# 1. GETTING STARTED (ETL)
-# =====================================================================
+
 # =====================================================================
 # 1. GETTING STARTED (ETL)
 # =====================================================================
@@ -58,11 +57,13 @@ def ingest_data():
     pg_conn = get_pg_connection()
     pg_cursor = pg_conn.cursor()
     
-    # --- SAFETY GUARD: Check if database is already populated ---
+    # --- DAY 1 SETUP & SAFETY GUARD ---
     try:
         # Check if the 'team' table exists in the public schema
         pg_cursor.execute("SELECT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'team');")
-        if pg_cursor.fetchone()[0]:
+        table_exists = pg_cursor.fetchone()[0]
+        
+        if table_exists:
             # If it exists, check if it has data
             pg_cursor.execute("SELECT COUNT(*) FROM Team;")
             if pg_cursor.fetchone()[0] > 0:
@@ -71,9 +72,27 @@ def ingest_data():
                 pg_cursor.close()
                 pg_conn.close()
                 return
-    except psycopg2.Error:
-        # If any check fails (e.g., schema doesn't exist at all), rollback the transaction and proceed to ingestion
+        else:
+            # The database is completely blank! Let's build the architecture automatically.
+            with console.status("[bold magenta]Blank database detected. Building Schema and Triggers from SQL files...[/bold magenta]"):
+                with open("sql/01_schema.sql", "r", encoding="utf-8") as schema_file:
+                    pg_cursor.execute(schema_file.read())
+                with open("sql/02_triggers.sql", "r", encoding="utf-8") as triggers_file:
+                    pg_cursor.execute(triggers_file.read())
+                pg_conn.commit()
+            console.print("[bold green]Database architecture constructed successfully![/bold green]")
+            
+    except psycopg2.Error as e:
         pg_conn.rollback()
+        console.print(f"[bold red][ERROR] Architecture setup failed: {e}[/bold red]\n")
+        pg_cursor.close()
+        pg_conn.close()
+        return
+    except FileNotFoundError as e:
+        console.print(f"[bold red][ERROR] Could not find SQL file: {e}[/bold red]")
+        pg_cursor.close()
+        pg_conn.close()
+        return
     # ------------------------------------------------------------
     
     sqlite_conn = get_sqlite_connection()
@@ -85,7 +104,13 @@ def ingest_data():
             populate_match_core_and_odds(sqlite_cursor, pg_cursor)
             populate_match_events(sqlite_cursor, pg_cursor)
             pg_conn.commit()
-        console.print("[bold green][SUCCESS] Database fully populated![/bold green]\n")
+            
+            # Synchronize the Materialized Views
+            pg_cursor.execute("REFRESH MATERIALIZED VIEW mv_team_summary;")
+            pg_cursor.execute("REFRESH MATERIALIZED VIEW mv_player_summary;")
+            pg_conn.commit()
+            
+        console.print("[bold green][SUCCESS] Database fully populated and views synchronized![/bold green]\n")
     except Exception as e:
         pg_conn.rollback()
         console.print(f"[bold red][ERROR] Ingestion Failed: {e}[/bold red]\n")
@@ -211,64 +236,90 @@ def vis_odds_evolution():
 
 def vis_pitch_heatmap():
     console.print("\n[bold cyan]--- Player Spatial Pitch Heatmap ---[/bold cyan]")
-    for k, v in PLAYERS.items(): console.print(f"[{k}] {v}")
-    player_id = Prompt.ask("Select Player", choices=list(PLAYERS.keys()))
-    player_name = PLAYERS[player_id]
+    search_name = Prompt.ask("Enter Player Name to visualize (e.g., 'Ronaldo')")
 
-    query = """
-        SELECT a.X_coordinate, a.Y_coordinate
-        FROM Appearance a, Player p
-        WHERE a.player_id = p.player_id AND p.player_name = %s
-          AND a.X_coordinate IS NOT NULL AND a.Y_coordinate IS NOT NULL;
-    """
     pg_conn = get_pg_connection()
     pg_cursor = pg_conn.cursor()
+    
     try:
-        with console.status("[yellow]Mapping coordinates...[/yellow]"):
-            pg_cursor.execute(query, (player_name,))
-            results = pg_cursor.fetchall()
+        # 1. Preliminary Disambiguation Search
+        pg_cursor.execute(
+            "SELECT DISTINCT player_id, player_name FROM Player WHERE player_name ILIKE %s ORDER BY player_name LIMIT 15;", 
+            (f"%{search_name}%",)
+        )
+        matches = pg_cursor.fetchall()
+
+        # 2. Handle Search Results
+        if not matches:
+            console.print(f"[yellow]No players found matching '{search_name}'.[/yellow]")
+            return
+        elif len(matches) == 1:
+            exact_id, exact_name = matches[0]
+        else:
+            console.print("\n[bold yellow]Multiple players found. Please select one:[/bold yellow]")
+            for i, (p_id, name) in enumerate(matches, 1):
+                console.print(f"[{i}] {name} (ID: {p_id})")
+            console.print(f"[{len(matches)+1}] Cancel")
             
-            if not results:
-                console.print("[red]No spatial data found for this player.[/red]")
+            choice = Prompt.ask("Select", choices=[str(i) for i in range(1, len(matches) + 2)])
+            if choice == str(len(matches) + 1): 
                 return
+            exact_id, exact_name = matches[int(choice) - 1]
 
-            # Initialize 11x9 pitch grid (Y is 1-11, X is 1-9)
-            grid = [[0 for _ in range(9)] for _ in range(11)]
-            max_val = 0
-            
-            for x, y in results:
-                y_idx = min(max(y - 1, 0), 10)
-                
-                # FIXED: The Kaggle Dataset (from FIFA) maps X=1 to the RIGHT wing 
-                # and X=9 to the LEFT wing. We must invert X to print it correctly!
-                x_idx = 8 - min(max(x - 1, 0), 8) 
-                
-                grid[y_idx][x_idx] += 1
-                if grid[y_idx][x_idx] > max_val:
-                    max_val = grid[y_idx][x_idx]
+        # 3. Fetch Coordinates for the Selected Player
+        with console.status(f"[yellow]Mapping coordinates for {exact_name}...[/yellow]"):
+            query = """
+                SELECT X_coordinate, Y_coordinate 
+                FROM Appearance 
+                WHERE player_id = %s AND X_coordinate IS NOT NULL AND Y_coordinate IS NOT NULL;
+            """
+            pg_cursor.execute(query, (exact_id,))
+            results = pg_cursor.fetchall()
 
-            console.print(f"\n[bold magenta]Attacking Direction [^][/bold magenta]")
-            console.print("[dim]------------------------------------[/dim]")
+        if not results:
+            console.print(f"[yellow]No spatial tracking data available for {exact_name}.[/yellow]")
+            return
+
+        console.print(f"[bold green]Successfully mapped {len(results)} positional data points for {exact_name}![/bold green]")
+
+        # 4. Terminal Plotting Logic
+        # Initialize 11x9 pitch grid (Y is 1-11, X is 1-9)
+        grid = [[0 for _ in range(9)] for _ in range(11)]
+        max_val = 0
+        
+        for x, y in results:
+            y_idx = min(max(y - 1, 0), 10)
             
-            # Print from Y=11 (Attack) down to Y=1 (Defense)
-            shades = [' . ', ' ░ ', ' ▒ ', ' ▓ ', ' █ ']
-            for row in reversed(grid):
-                row_str = ""
-                for val in row:
-                    if val == 0:
-                        row_str += "[dim]" + shades[0] + "[/dim]"
-                    else:
-                        # Normalize density
-                        intensity = int((val / max_val) * 4)
-                        color = "green" if intensity < 2 else "yellow" if intensity < 3 else "red"
-                        row_str += f"[{color}]" + shades[intensity] + f"[/{color}]"
-                console.print(row_str)
+            # FIXED: The Kaggle Dataset (from FIFA) maps X=1 to the RIGHT wing 
+            # and X=9 to the LEFT wing. We must invert X to print it correctly!
+            x_idx = 8 - min(max(x - 1, 0), 8) 
             
-            console.print("[dim]------------------------------------[/dim]")
-            console.print(f"[bold magenta]Defending Direction [v][/bold magenta]\n")
+            grid[y_idx][x_idx] += 1
+            if grid[y_idx][x_idx] > max_val:
+                max_val = grid[y_idx][x_idx]
+
+        console.print(f"\n[bold magenta]Attacking Direction [^][/bold magenta]")
+        console.print("[dim]------------------------------------[/dim]")
+        
+        # Print from Y=11 (Attack) down to Y=1 (Defense)
+        shades = [' . ', ' ░ ', ' ▒ ', ' ▓ ', ' █ ']
+        for row in reversed(grid):
+            row_str = ""
+            for val in row:
+                if val == 0:
+                    row_str += "[dim]" + shades[0] + "[/dim]"
+                else:
+                    # Normalize density
+                    intensity = int((val / max_val) * 4)
+                    color = "green" if intensity < 2 else "yellow" if intensity < 3 else "red"
+                    row_str += f"[{color}]" + shades[intensity] + f"[/{color}]"
+            console.print(row_str)
+        
+        console.print("[dim]------------------------------------[/dim]")
+        console.print(f"[bold magenta]Defending Direction [v][/bold magenta]\n")
             
     except psycopg2.Error as e:
-        console.print(f"[bold red]Error: {e}[/bold red]")
+        console.print(f"[bold red]Database Error: {e}[/bold red]")
     finally:
         pg_cursor.close()
         pg_conn.close()
@@ -413,22 +464,335 @@ def match_and_betting_analytics():
         """
         execute_and_print(query, title="Most Favorable Bookmaker Margins (Closest to 100%)")
 
+def search_player_profile():
+    console.print("\n[bold cyan]--- Player Profile Search ---[/bold cyan]")
+    search_name = Prompt.ask("Enter Player Name (e.g., 'Messi')")
+
+    pg_conn = get_pg_connection()
+    pg_cursor = pg_conn.cursor()
+    try:
+        pg_cursor.execute("SELECT DISTINCT player_id, player_name FROM Player WHERE player_name ILIKE %s ORDER BY player_name LIMIT 15;", (f"%{search_name}%",))
+        matches = pg_cursor.fetchall()
+    except psycopg2.Error as e:
+        console.print(f"[bold red]Database Error: {e}[/bold red]")
+        return
+    finally:
+        pg_cursor.close()
+        pg_conn.close()
+
+    if not matches:
+        console.print(f"[yellow]No players found matching '{search_name}'.[/yellow]")
+        return
+    elif len(matches) == 1:
+        exact_id, exact_name = matches[0]
+    else:
+        console.print("\n[bold yellow]Multiple players found. Please select one:[/bold yellow]")
+        for i, (p_id, name) in enumerate(matches, 1):
+            console.print(f"[{i}] {name} (ID: {p_id})")
+        console.print(f"[{len(matches)+1}] Cancel")
+        
+        choice = Prompt.ask("Select", choices=[str(i) for i in range(1, len(matches) + 2)])
+        if choice == str(len(matches) + 1): return
+        exact_id, exact_name = matches[int(choice) - 1]
+
+    query_seasons = "SELECT season, appearances, goals, cards FROM mv_player_summary WHERE player_id = %s ORDER BY season;"
+    query_totals = "SELECT SUM(appearances) AS career_appearances, SUM(goals) AS career_goals, SUM(cards) AS career_cards FROM mv_player_summary WHERE player_id = %s;"
+    
+    execute_and_print(query_seasons, (exact_id,), title=f"Season Stats: {exact_name} (ID: {exact_id})")
+    execute_and_print(query_totals, (exact_id,), title=f"Career Totals: {exact_name} (ID: {exact_id})")
+
+def search_team_profile():
+    console.print("\n[bold cyan]--- Team Profile Search ---[/bold cyan]")
+    search_name = Prompt.ask("Enter Team Name (e.g., 'Arsenal')")
+
+    pg_conn = get_pg_connection()
+    pg_cursor = pg_conn.cursor()
+    try:
+        pg_cursor.execute("SELECT DISTINCT team_api_id, team_long_name FROM Team WHERE team_long_name ILIKE %s ORDER BY team_long_name LIMIT 15;", (f"%{search_name}%",))
+        matches = pg_cursor.fetchall()
+    except psycopg2.Error as e:
+        console.print(f"[bold red]Database Error: {e}[/bold red]")
+        return
+    finally:
+        pg_cursor.close()
+        pg_conn.close()
+
+    if not matches:
+        console.print(f"[yellow]No teams found matching '{search_name}'.[/yellow]")
+        return
+    elif len(matches) == 1:
+        exact_id, exact_name = matches[0]
+    else:
+        console.print("\n[bold yellow]Multiple teams found. Please select one:[/bold yellow]")
+        for i, (t_id, name) in enumerate(matches, 1):
+            console.print(f"[{i}] {name} (ID: {t_id})")
+        console.print(f"[{len(matches)+1}] Cancel")
+        
+        choice = Prompt.ask("Select", choices=[str(i) for i in range(1, len(matches) + 2)])
+        if choice == str(len(matches) + 1): return
+        exact_id, exact_name = matches[int(choice) - 1]
+
+    query_seasons = "SELECT season, wins, draws, losses, points, final_placement FROM mv_team_summary WHERE team_long_name = %s ORDER BY season;"
+    query_totals = "SELECT SUM(wins) AS all_time_wins, SUM(draws) AS all_time_draws, SUM(losses) AS all_time_losses, SUM(points) AS all_time_points, COUNT(CASE WHEN final_placement = 1 THEN 1 END) AS total_championships FROM mv_team_summary WHERE team_long_name = %s;"
+    
+    execute_and_print(query_seasons, (exact_name,), title=f"Season Stats: {exact_name} (ID: {exact_id})")
+    execute_and_print(query_totals, (exact_name,), title=f"All-Time Totals: {exact_name} (ID: {exact_id})")
+
+def search_match():
+    console.print("\n[bold cyan]--- Match Explorer ---[/bold cyan]")
+    for k, v in SEASONS.items(): console.print(f"[{k}] {v}")
+    season_id = Prompt.ask("Select Season", choices=list(SEASONS.keys()))
+    season_val = SEASONS[season_id]
+
+    home_name = Prompt.ask("Enter Home Team Name (or part of it)")
+    away_name = Prompt.ask("Enter Away Team Name (or part of it)")
+
+    pg_conn = get_pg_connection()
+    pg_cursor = pg_conn.cursor()
+
+    try:
+        query = """
+            SELECT m.match_api_id, m.date, th.team_long_name, ta.team_long_name, m.home_team_goal, m.away_team_goal
+            FROM Match m
+            JOIN Team th ON m.home_team_api_id = th.team_api_id
+            JOIN Team ta ON m.away_team_api_id = ta.team_api_id
+            WHERE m.season = %s AND th.team_long_name ILIKE %s AND ta.team_long_name ILIKE %s
+            ORDER BY m.date;
+        """
+        pg_cursor.execute(query, (season_val, f"%{home_name}%", f"%{away_name}%"))
+        matches = pg_cursor.fetchall()
+
+        if not matches:
+            console.print("[yellow]No matches found for these teams in this season.[/yellow]")
+            return
+
+        console.print("\n[bold yellow]Select a match to view details:[/bold yellow]")
+        for i, m in enumerate(matches, 1):
+            console.print(f"[{i}] {m[1]} | {m[2]} {m[4]} - {m[5]} {m[3]} (Match ID: {m[0]})")
+        console.print(f"[{len(matches)+1}] Cancel")
+
+        choice = Prompt.ask("Select", choices=[str(i) for i in range(1, len(matches) + 2)])
+        if choice == str(len(matches) + 1): return
+
+        selected_match_id = matches[int(choice)-1][0]
+        title_str = f"Match ID: {selected_match_id} | {matches[int(choice)-1][2]} vs {matches[int(choice)-1][3]}"
+
+        execute_and_print("SELECT bookmaker, home_win, draw, away_win FROM Betting_Odds WHERE match_api_id = %s", (selected_match_id,), title=f"Betting Odds - {title_str}")
+        
+        event_query = """
+            SELECT me.minute, me.event_type, p.player_name
+            FROM Match_Event me
+            JOIN Player p ON me.player_id = p.player_id
+            WHERE me.match_api_id = %s
+            ORDER BY me.minute;
+        """
+        execute_and_print(event_query, (selected_match_id,), title=f"Match Events - {title_str}")
+
+    except psycopg2.Error as e:
+        console.print(f"[bold red]Error: {e}[/bold red]")
+    finally:
+        pg_cursor.close()
+        pg_conn.close()
+
 def find_info_menu():
     while True:
         console.print("\n[bold cyan]--- Find Information ---[/bold cyan]")
-        console.print("[1] Visualisation Engine (Distributions, Heatmaps, Trends)")
-        console.print("[2] Player Analytics (Goals, Cards, Apps)")
-        console.print("[3] Team Analytics (League Champions)")
-        console.print("[4] Match & Betting Analytics (Upsets, Arbitrage)")
-        console.print("[5] Back to Main Menu")
+        console.print("[1] Search Player Profile (Career & Season Stats)")
+        console.print("[2] Search Team Profile (Standings & Match Records)")
+        console.print("[3] Visualisation Engine (Distributions, Heatmaps, Trends)")
+        console.print("[4] Player Analytics (Goals, Cards, Apps)")
+        console.print("[5] Team Analytics (League Champions)")
+        console.print("[6] Match & Betting Analytics (Upsets, Arbitrage)")
+        console.print("[7] Search Specific Match Details")
+        console.print("[8] Back to Main Menu")
         
-        choice = Prompt.ask("Select", choices=["1", "2", "3", "4", "5"])
-        if choice == "1": visualize_data_menu()
-        elif choice == "2": dynamic_player_analytics()
-        elif choice == "3": dynamic_team_analytics()
-        elif choice == "4": match_and_betting_analytics()
-        elif choice == "5": break
+        
+        choice = Prompt.ask("Select", choices=["1", "2", "3", "4", "5", "6", "7", "8"])
+        if choice == "1": search_player_profile()
+        elif choice == "2": search_team_profile()
+        elif choice == "3": visualize_data_menu()
+        elif choice == "4": dynamic_player_analytics()
+        elif choice == "5": dynamic_team_analytics()
+        elif choice == "6": match_and_betting_analytics()
+        elif choice == "7": search_match()
+        elif choice == "8": break
 
+
+
+# --- DATABASE MANAGEMENT (FULL CRUD) ---
+# --- CREATE ---
+def crud_add_player():
+    console.print("\n[bold green]--- Add New Player ---[/bold green]")
+    try:
+        p_id = int(Prompt.ask("Enter New Player ID (e.g., 999999)"))
+        p_name = Prompt.ask("Enter Player Name")
+        height = float(Prompt.ask("Enter Height (cm)"))
+        weight = int(Prompt.ask("Enter Weight (kg)"))
+        
+        pg_conn = get_pg_connection()
+        pg_cursor = pg_conn.cursor()
+        pg_cursor.execute("INSERT INTO Player (player_id, player_name, height, weight) VALUES (%s, %s, %s, %s);", (p_id, p_name, height, weight))
+        pg_conn.commit()
+        console.print(f"[bold green][SUCCESS] Player '{p_name}' successfully added.[/bold green]")
+    except Exception as e:
+        console.print(f"[bold red][ERROR] {e}[/bold red]")
+    finally:
+        if 'pg_conn' in locals(): pg_conn.close()
+
+def crud_add_team():
+    console.print("\n[bold green]--- Add New Team ---[/bold green]")
+    try:
+        t_id = int(Prompt.ask("Enter New Team API ID (e.g., 999999)"))
+        long_name = Prompt.ask("Enter Team Long Name")
+        short_name = Prompt.ask("Enter Team Short Name (e.g., 'MUN')")
+        
+        pg_conn = get_pg_connection()
+        pg_cursor = pg_conn.cursor()
+        pg_cursor.execute("INSERT INTO Team (team_api_id, team_long_name, team_short_name) VALUES (%s, %s, %s);", (t_id, long_name, short_name))
+        pg_conn.commit()
+        console.print(f"[bold green][SUCCESS] Team '{long_name}' successfully added.[/bold green]")
+    except Exception as e:
+        console.print(f"[bold red][ERROR] {e}[/bold red]")
+    finally:
+        if 'pg_conn' in locals(): pg_conn.close()
+
+def crud_add_match_csv():
+    console.print("\n[bold green]--- Relational Match Importer (Strict DDL) ---[/bold green]")
+    filepath = Prompt.ask("Enter CSV filepath", default="data/real_vs_barca.csv")
+    
+    if not os.path.exists(filepath):
+        console.print(f"[red]File '{filepath}' not found.[/red]")
+        return
+        
+    pg_conn = get_pg_connection()
+    pg_cursor = pg_conn.cursor()
+    
+    try:
+        with open(filepath, mode='r') as file:
+            reader = csv.reader(file)
+            next(reader)  # Skip header
+            
+            with console.status("[yellow]Processing relational records...[/yellow]"):
+                for row in reader:
+                    if not row: continue
+                    entity = row[0].strip().upper()
+                    
+                    if entity == "MATCH":
+                        query = "INSERT INTO Match (match_api_id, league_id, season, date, stage, home_team_api_id, away_team_api_id, home_team_goal, away_team_goal) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);"
+                        pg_cursor.execute(query, tuple(row[1:10]))
+                    elif entity == "APPEARANCE":
+                        query = "INSERT INTO Appearance (match_api_id, player_id, is_home_team, X_coordinate, Y_coordinate) VALUES (%s, %s, %s, %s, %s);"
+                        pg_cursor.execute(query, tuple(row[1:6]))
+                    elif entity == "EVENT":
+                        query = "INSERT INTO Match_Event (match_api_id, event_id, player_id, minute, event_type) VALUES (%s, %s, %s, %s, %s);"
+                        pg_cursor.execute(query, tuple(row[1:6]))
+                        
+        pg_cursor.execute("REFRESH MATERIALIZED VIEW mv_team_summary;")
+        pg_cursor.execute("REFRESH MATERIALIZED VIEW mv_player_summary;")
+        pg_conn.commit()
+        console.print(f"[bold green][SUCCESS] Complete match record imported from {filepath}.[/bold green]")
+        
+    except psycopg2.Error as e:
+        pg_conn.rollback()
+        console.print(f"\n[bold red][SQL Constraint Violation][/bold red] {e}")
+        console.print("[yellow]Hint: The database engine may have rejected the CSV because a Team ID or Player ID inside it does not exist in the database yet. You must create them first![/yellow]")
+    except Exception as e:
+        pg_conn.rollback()
+        console.print(f"[bold red][ERROR][/bold red] {e}")
+    finally:
+        pg_cursor.close()
+        pg_conn.close()
+
+def crud_update_entity():
+    console.print("\n[bold yellow]--- Update Entity ---[/bold yellow]")
+    choice = Prompt.ask("Update: [1] Player Stats [2] Team Name", choices=["1", "2"])
+    
+    pg_conn = get_pg_connection()
+    pg_cursor = pg_conn.cursor()
+    try:
+        if choice == "1":
+            p_id = int(Prompt.ask("Enter exact Player ID"))
+            height = float(Prompt.ask("Enter New Height (cm)"))
+            weight = int(Prompt.ask("Enter New Weight (kg)"))
+            pg_cursor.execute("UPDATE Player SET height = %s, weight = %s WHERE player_id = %s;", (height, weight, p_id))
+        else:
+            t_id = int(Prompt.ask("Enter exact Team API ID"))
+            new_name = Prompt.ask("Enter New Team Long Name")
+            pg_cursor.execute("UPDATE Team SET team_long_name = %s WHERE team_api_id = %s;", (new_name, t_id))
+            
+        if pg_cursor.rowcount == 0:
+            console.print("[yellow]Record not found. Use the Search function to find exact IDs.[/yellow]")
+        else:
+            pg_conn.commit()
+            console.print("[bold green][SUCCESS] Record updated successfully![/bold green]")
+    except Exception as e:
+        pg_conn.rollback()
+        console.print(f"[bold red][ERROR] {e}[/bold red]")
+    finally:
+        pg_cursor.close()
+        pg_conn.close()
+
+# --- DELETE ---
+def crud_delete_entity():
+    console.print("\n[bold red]--- Delete Entity (Nuclear CASCADE) ---[/bold red]")
+    console.print("[dim]WARNING: Deleting a Team or Player will wipe all their historical appearances and events![/dim]")
+    choice = Prompt.ask("Delete: [1] Player [2] Team [3] Match", choices=["1", "2", "3"])
+    
+    pg_conn = get_pg_connection()
+    pg_cursor = pg_conn.cursor()
+    
+    try:
+        if choice == "1":
+            p_id = int(Prompt.ask("Enter Player ID to delete"))
+            query = "DELETE FROM Player WHERE player_id = %s;"
+            target = p_id
+        elif choice == "2":
+            t_id = int(Prompt.ask("Enter Team API ID to delete"))
+            query = "DELETE FROM Team WHERE team_api_id = %s;"
+            target = t_id
+        else:
+            m_id = int(Prompt.ask("Enter Match API ID to delete"))
+            query = "DELETE FROM Match WHERE match_api_id = %s;"
+            target = m_id
+            
+        confirm = Prompt.ask(f"[bold red]Type 'YES' to permanently delete ID {target} and all associated data[/bold red]")
+        if confirm == 'YES':
+            with console.status("[red]Executing cascading deletion...[/red]"):
+                pg_cursor.execute(query, (target,))
+                if pg_cursor.rowcount == 0:
+                    console.print("[yellow]Record not found.[/yellow]")
+                else:
+                    pg_conn.commit()               
+                    pg_cursor.execute("REFRESH MATERIALIZED VIEW mv_team_summary;")
+                    pg_cursor.execute("REFRESH MATERIALIZED VIEW mv_player_summary;")
+                    pg_conn.commit()                 
+                    console.print("[bold green][SUCCESS] Record deleted and dashboards re-synchronized.[/bold green]")
+        else:
+            console.print("[yellow]Deletion aborted.[/yellow]")
+    except Exception as e:
+        pg_conn.rollback()
+        console.print(f"[bold red][ERROR] {e}[/bold red]")
+    finally:
+        pg_cursor.close()
+        pg_conn.close()
+
+def data_management_menu():
+    while True:
+        console.print("\n[bold magenta]--- Database Management (Full CRUD) ---[/bold magenta]")
+        console.print("[1] Create: Add Player")
+        console.print("[2] Create: Add Team")
+        console.print("[3] Create: Import Match via CSV")
+        console.print("[4] Update: Modify Player or Team")
+        console.print("[5] Delete: Remove Player, Team, or Match (CASCADE)")
+        console.print("[6] Back to Main Menu")
+        
+        choice = Prompt.ask("Select", choices=["1", "2", "3", "4", "5", "6"])
+        if choice == "1": crud_add_player()
+        elif choice == "2": crud_add_team()
+        elif choice == "3": crud_add_match_csv()
+        elif choice == "4": crud_update_entity()
+        elif choice == "5": crud_delete_entity()
+        elif choice == "6": break
 # =====================================================================
 # 3. ADVANCED SETTINGS (ADMIN)
 # =====================================================================
@@ -548,17 +912,19 @@ def main():
         menu_text = (
             "[1] Getting Started (Run Ingestion)\n"
             "[2] Find Information (Explore Database)\n"
-            "[3] Advanced Settings (Admin & Defense Demos)\n"
-            "[4] Exit"
+            "[3] Database Management (Full CRUD Operations)\n"
+            "[4] Advanced Settings (Admin & Defense Demos)\n"
+            "[5] Exit"
         )
-        console.print(Panel(menu_text, title="[bold cyan]FootStats Administrative Dashboard[/bold cyan]", expand=False))
+        console.print(Panel(menu_text, title="[bold cyan] FootStats Analytics Dashboard[/bold cyan]", expand=False))
         
-        choice = Prompt.ask("Select an option", choices=["1", "2", "3", "4"])
+        choice = Prompt.ask("Select an option", choices=["1", "2", "3", "4", "5"])
         
         if choice == '1': ingest_data()
         elif choice == '2': find_info_menu()
-        elif choice == '3': advanced_settings_menu()
-        elif choice == '4':
+        elif choice == '3': data_management_menu()
+        elif choice == '4': advanced_settings_menu()
+        elif choice == '5':
             console.print("[bold green]Exiting application. Goodbye![/bold green]")
             sys.exit(0)
 
