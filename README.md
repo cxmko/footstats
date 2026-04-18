@@ -74,7 +74,9 @@ This module acts as the read-only analytics engine, powered by optimized B-Tree 
 ### [3] Database Management (Full CRUD Operations)
 A strict, UI-driven data entry module that allows you to safely alter the database while respecting 3NF referential integrity.
 * **Create:** Add custom players or teams directly to the database.
-* **Relational CSV Importer:** Upload bulk match data (e.g., `data/real_vs_barca.csv`). The pipeline strictly inserts into `Match`, then `Appearance`, and finally `Match_Event` to ensure Foreign Key constraints are never violated.
+* **Relational CSV Importer:** Upload bulk match data. The pipeline strictly inserts into `Match`, then `Appearance`, and finally `Match_Event` to ensure Foreign Key constraints are never violated. *(Note: Importing a CSV automatically triggers a refresh of the Materialized Views, meaning analytical stats update instantly!)*
+  * **Standard Test:** Import `data/real_vs_barca.csv` to safely test the pipeline. You can instantly see how it impacts player/team stats, or look up the newly created game using the *Search Specific Match Details* feature.
+  * **Custom Entity Test:** To test the strict DDL constraints, try importing `data/custom_match.csv` first—the database will reject it! Then, use the **Create** menu to add a custom Player with ID `71` and a custom Team with API ID `71`. Import `data/custom_match.csv` again, and it will succeed. You can immediately search for your custom player or team in the *Find Information* menu to see their freshly generated appearances and goals.
 * **Update:** Modify existing player physical stats or correct team names.
 * **Deletion (Cascade):** Delete a specific Match, Player, or Team. Demonstrates the power of `ON DELETE CASCADE` by safely hunting down and erasing all associated weak entities (appearances, goals) without leaving orphan records. Automatically re-synchronizes analytics dashboards post-deletion.
 
